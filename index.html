@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>나의 소개</title>
+    <title>날씨 정보 차트</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet.js CDN -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,86 +15,213 @@
             padding: 0;
             background-color: #f4f4f9;
             color: #333;
+            text-align: center;
         }
         header {
             background-color: #4CAF50;
             color: white;
-            padding: 20px;
-            text-align: center;
+            padding: 30px;
+            font-size: 2em;
         }
         main {
+            display: flex;
+            justify-content: center;
+            align-items: center;
             padding: 20px;
+            flex-wrap: wrap;
         }
-        .intro {
-            margin-bottom: 20px;
+        .weather-info {
+            margin-top: 30px;
+            font-size: 1.5em;
+            flex: 1;
+            max-width: 500px;
         }
-        .intro h2 {
-            color: #4CAF50;
-        }
-        .intro p {
-            line-height: 1.6;
-        }
-        .contact-info {
-            margin-top: 20px;
-        }
-        .contact-info ul {
-            list-style: none;
-            padding: 0;
-        }
-        .contact-info li {
-            margin: 10px 0;
-        }
-        .video-container {
-            text-align: center;
+        .weather-info h3 {
             margin: 20px 0;
         }
-        iframe {
-            width: 100%;
-            max-width: 800px;
-            height: 450px;
+        input[type="text"] {
+            padding: 15px;
+            width: 300px;
+            font-size: 1.2em;
+            margin: 20px 0;
+            border-radius: 5px;
         }
-        footer {
-            text-align: center;
-            padding: 20px;
+        button {
+            padding: 15px 30px;
             background-color: #4CAF50;
             color: white;
+            font-size: 1.2em;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        footer {
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px;
             position: fixed;
-            width: 100%;
             bottom: 0;
+            width: 100%;
+            font-size: 1.2em;
+        }
+        canvas {
+            max-width: 800px;
+            margin: 40px auto;
+            max-height: 500px;
+        }
+        #map {
+            height: 300px;
+            width: 100%;
+            margin-top: 30px;
+            flex: 1;
+            max-width: 600px;
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>나의 소개 페이지</h1>
+        <h1>날씨 정보 차트</h1>
     </header>
     
     <main>
-        <section class="intro">
-            <h2>안녕하세요! 저는 [이후경]입니다.</h2>
-            <p>저는 [학생]으로 활동하고 있으며, 다양한 기술과 경험을 가지고 있습니다. 주로 [학교]에서 일을 하며, 사람들과 협업하고 문제를 해결하는 것을 좋아합니다.</p>
-            <p>이 페이지는 저를 간단히 소개하기 위해 만들어졌습니다. 더 궁금한 점이 있으면 아래 연락처로 연락주세요!</p>
+        <section>
+            <h2>원하는 도시의 날씨를 확인해 보세요!</h2>
+            <input type="text" id="cityInput" placeholder="도시 이름 입력">
+            <button onclick="getWeather()">날씨 확인</button>
         </section>
 
-        <section class="video-container">
-            <h3>나의 소개 영상</h3>
-            <!-- YouTube 영상 삽입 -->
-            <iframe src="https://www.youtube.com/embed/1DPkYoyRhJY" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        <section class="weather-info" id="weatherInfo">
+            <!-- 날씨 정보 차트와 텍스트가 여기에 표시됩니다 -->
         </section>
 
-        <section class="contact-info">
-            <h3>연락처</h3>
-            <ul>
-                <li>이메일: [이메일 주소]</li>
-                <li>전화: [전화번호]</li>
-                <li>LinkedIn: [LinkedIn 프로필 링크]</li>
-                <li>GitHub: [GitHub 프로필 링크]</li>
-            </ul>
+        <section style="flex: 1;">
+            <canvas id="weatherChart"></canvas>
         </section>
+
+        <!-- 지도 표시 영역 -->
+        <div id="map"></div>
     </main>
 
     <footer>
-        <p>&copy; 2025 [이름]. 모든 권리 보유.</p>
+        <p>&copy; 2025 나의 날씨 웹사이트</p>
     </footer>
+
+    <script>
+        const apiKey = '24109ddecb29a5405afe2a8df42c5e34'; // 주어진 API 키
+        let weatherChart = null; // 차트 객체를 저장할 변수
+        let map = null; // Leaflet 지도 객체
+
+        // 날씨 정보를 가져오는 함수
+        async function getWeather() {
+            const city = document.getElementById('cityInput').value;
+            if (city === '') {
+                alert('도시 이름을 입력하세요!');
+                return;
+            }
+
+            const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric&lang=kr`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.cod === '404') {
+                    alert('도시를 찾을 수 없습니다. 다시 시도해 주세요.');
+                    return;
+                }
+
+                const weatherDescription = data.weather[0].description;
+                const temperature = data.main.temp;
+                const humidity = data.main.humidity;
+                const windSpeed = data.wind.speed;
+                const lat = data.coord.lat; // 위도
+                const lon = data.coord.lon; // 경도
+
+                // 날씨 정보 HTML을 동적으로 생성하여 페이지에 표시
+                document.getElementById('weatherInfo').innerHTML = `
+                    <h3>${city}의 날씨</h3>
+                    <p style="font-size: 1.5em;">날씨: ${weatherDescription}</p>
+                    <p style="font-size: 1.5em;">온도: ${temperature}°C</p>
+                    <p style="font-size: 1.5em;">습도: ${humidity}%</p>
+                    <p style="font-size: 1.5em;">바람 속도: ${windSpeed} m/s</p>
+                `;
+
+                // 날씨 데이터를 차트에 표시
+                const labels = ['온도', '습도', '바람 속도'];
+                const dataValues = [temperature, humidity, windSpeed];
+
+                if (weatherChart) {
+                    weatherChart.destroy(); // 기존 차트가 있으면 삭제
+                }
+
+                // 새로운 차트 생성
+                const ctx = document.getElementById('weatherChart').getContext('2d');
+                weatherChart = new Chart(ctx, {
+                    type: 'bar', // 바 차트
+                    data: {
+                        labels: labels, // 차트에 사용할 라벨
+                        datasets: [{
+                            label: `${city}의 날씨`,
+                            data: dataValues, // 온도, 습도, 바람 속도 값
+                            backgroundColor: ['rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(75, 192, 192, 0.2)'],
+                            borderColor: ['rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)'],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    font: {
+                                        size: 18 // y축 글씨 크기
+                                    }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    font: {
+                                        size: 18 // x축 글씨 크기
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    font: {
+                                        size: 18 // 범례 글씨 크기
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // 지도 업데이트
+                if (!map) {
+                    // 지도 생성 (처음 한 번만 생성)
+                    map = L.map('map').setView([lat, lon], 10); // 초기 위치 설정
+
+                    // OpenStreetMap 타일 레이어 추가
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    }).addTo(map);
+                }
+
+                // 지도에 마커 추가
+                L.marker([lat, lon]).addTo(map)
+                    .bindPopup(`<b>${city}</b><br>위도: ${lat}<br>경도: ${lon}`)
+                    .openPopup();
+
+            } catch (error) {
+                alert('날씨 정보를 가져오는 데 문제가 발생했습니다. 다시 시도해 주세요.');
+            }
+        }
+    </script>
 </body>
 </html>
